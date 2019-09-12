@@ -1,0 +1,790 @@
+---
+title: "Breast Cancer Analysis"
+author: "Utsav Patel"
+date: "28 April 2019"
+output:
+  html_document:
+    df_print: paged
+  pdf_document: default
+  word_document: default
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE)
+```
+
+
+## Abstract
+
+About 1 in 8 U.S. women (about 12%) will develop invasive breast cancer over the course of her lifetime. There are two types of tumors: Benign and Malignant. Malignant tumor is cancerous and is dangerous if it is not treated in the early stages. It is also very expensive in the United States for the cancer diagnosis and treatment. Hence, in the search to find a cheaper diagnosis technique, we propose a few models like logistic regression, linear classification on PCA(Principal Component Analysis) and Random Forest, which can help diagnose breast cancer as benign or malignant.
+
+## Introduction
+
+Breast cancer is a type of cancer that develops from breast
+tissue and is often associated by a lump in the breast, change in
+breast shape, development of red and patchy skin, or fluid
+emanating from the nipple. The causes for breast cancer have
+not been fully understood till date. There are some genetic
+factors, and some environmental factors associated with its
+development. Breast cancer is preliminarily detected by a
+mammogram exam and confirmed by a biopsy. 
+
+There is no single measurement that can be used to
+determine whether a given sample is benign or malignant.
+In 2019, an estimated 268,600 new cases of invasive breast cancer are expected to be diagnosed in women in the U.S., along with 62,930 new cases of non-invasive (in situ) breast cancer. About 2,670 new cases of invasive breast cancer are expected to be diagnosed in men in 2019. A lifetime risk of breast cancer for man is about 1 in 883. Breast cancer incidence rates in the U.S. began decreasing in the year 2000, after increasing for the previous two decades. They dropped by 7% from 2002 to 2003 alone. One theory is that this decrease was partially due to the reduced use of hormone replacement therapy (HRT) by women after the results of a large study called the Women's Health Initiative were published in 2002. These results suggested a connection between HRT and increased breast cancer risk. 
+
+There can be cancer because of 2 types of tumor: Benign and Malignant. 
+- Benign tumor are non-malignant/non-cancerous tumor. A benign tumor is usually localized, and does not spread to other parts of the body. Most benign tumor respond well to treatment. However, if left untreated, some benign tumor can grow large and lead to serious disease because of their size. Benign tumor can also mimic malignant tumor, and so for this reason are sometimes treated.
+- Malignant tumor are cancerous growths. They are much dangerous than the benign tumor. They usually grow very rapidly. They are often resistant to treatment, may spread to other parts of the body and they sometimes recur after removal. 
+
+## Dataset Characteristics
+
+We have 9 attributes which can help us detect whether the tumor is benign or malignant. Let's see what are those.
+
+- **Clump Thickness**: 
+This is used to assess if cells are
+mono-layered or multi-layered. Benign cells tend to be
+grouped in mono-layers, while cancerous cells are often
+grouped in multi-layer.
+
+- **Uniformity of Cell Size**: 
+It is used to evaluate the
+consistency in the size of cells in the sample. Cancer
+cells tend to vary in size. That is why this parameter is
+very valuable in determining whether the cells are
+cancerous or not.
+
+- **Uniformity of Cell Shape**: 
+It is used to estimate the equality of cell shapes and identifies marginal variances
+because cancer cells tend to vary in shape.
+
+- **Marginal Adhesion**: 
+Normal cells tend to stick together.
+Cancer cells tend to loose this ability. So loss of
+adhesion is a sign of malignancy.
+
+- **Single Epithelial Cell Size**: 
+It is related to the uniformity. Epithelial cells that are significantly enlarged
+may be a malignant cell.
+
+- **Bare Nuclei**: 
+This is a term used for nuclei that is not
+surrounded by cytoplasm. Those are typically seen in
+benign tumor.
+
+- **Bland Chromatin**: 
+Describes a uniform texture of the
+nucleus seen in benign cell. In cancer cell, the
+chromatin tends to be coarser.
+
+- **Normal Nucleoli**: 
+Nucleoli are small structures seen in
+the nucleus. In normal cell the nucleolus is usually very
+small if visible at all. In cancer cell the nucleoli become
+much more prominent, and sometimes there are more of
+them.
+
+- **Mitoses**: 
+It is an estimate of the number of mitosis that
+has taken place. Larger the value, greater is the chance of
+malignancy
+
+
+```{r results='hide', message=FALSE, include=FALSE}
+###Loading Libraries
+library(ggplot2)
+library(corrplot)
+library(broom)
+library(ElemStatLearn)
+library(cowplot)
+library(leaps)
+library(tidyverse)
+library(tidyr)
+library(dplyr)
+library(randomForest)
+library(devtools)
+library(factoextra)
+library(randomForest)
+library(mlbench)
+library(caret)
+#library(ggbiplot)
+```
+
+
+```{r results='hide', message=FALSE, include=FALSE}
+###Loading the data
+column_names = c("Sample_code_number", "Clump_thickness","Uniformity_of_cell_size", "Uniformity_of_cell_shape", "Marginal_adhesion", "Single_Epithelial_Cell_size", "Bare_Nuclei", "Bland_Chromatin","Normal_Nucleoli", "Mitoses", "Is_Malignant")
+
+bc = read.table("https://archive.ics.uci.edu/ml/machine-learning-databases/breast-cancer-wisconsin/breast-cancer-wisconsin.data", sep = ",",col.names = column_names)
+```
+
+
+```{r results='hide', message=FALSE, include=FALSE}
+###Preprocessing the data
+unique(bc$Bare_Nuclei)
+bc$Is_Malignant = ((bc$Is_Malignant)/2) -1
+bc = bc[,2:11]
+#head(df)
+bc = bc[bc$Bare_Nuclei != "?",]
+bc$Bare_Nuclei = as.numeric(bc$Bare_Nuclei)
+bc$Bare_Nuclei = bc$Bare_Nuclei -1
+bc$Is_Malignant = as.numeric(bc$Is_Malignant)
+```
+
+
+
+###Correlation heatmap of our data 
+```{r message=FALSE}
+cor_df =  cor(bc)
+corrplot(cor_df, type = "upper")
+```
+
+The above heatmap shows the correlation between variables. Darker the blue color higher positive correlation, darker the red color, higher negative correaltion. As we can see that all the variables are postively corelated with each other and with target variable. Size of the dot is proportional to absolute value of correlation.
+```{r message=FALSE, results='hide', include=FALSE}
+cor(bc$Clump_thickness, bc$Is_Malignant, method = c("pearson"))
+cor(bc$Uniformity_of_cell_size, bc$Is_Malignant, method = c("pearson"))
+cor(bc$Uniformity_of_cell_shape, bc$Is_Malignant, method = c("pearson"))
+cor(bc$Marginal_adhesion, bc$Is_Malignant, method = c("pearson"))
+cor(bc$Single_Epithelial_Cell_size, bc$Is_Malignant, method = c("pearson"))
+cor(bc$Bare_Nuclei, bc$Is_Malignant, method = c("pearson"))
+cor(bc$Bland_Chromatin, bc$Is_Malignant, method = c("pearson"))
+cor(bc$Normal_Nucleoli, bc$Is_Malignant, method = c("pearson"))
+cor(bc$Mitoses, bc$Is_Malignant, method = c("pearson"))
+```
+###Correlation of each variable with respect to target variable:
+
+To see how each variable is correlated with target variable, we have provided a clearer picture of the correlation values in a sorted manner.
+```{r message=FALSE}
+Var <- c("Uniformity of Cell Shape", "Uniformity of Cell Size", "Bland Chromatin", "Normal Nucleoli","Clump Thickness","Marginal Adhesion","Single Epithelial Cell Size","Bare Nuclei","Mitoses")
+correlation <- c(0.8218909, 0.8208014, 0.7582276, 0.7186772, 0.7147899, 0.7062941, 0.6909582, 0.5087019, 0.4234479)
+
+x <- data.frame(name = as.factor(Var), val = correlation)
+x$name <- factor(x$name, levels = x$name[order(x$val)])
+ggplot(x, aes(x = name, y = val)) +
+  theme_bw() +
+  geom_bar(stat = "identity") +
+  coord_flip() +
+  xlab("") + ylab("Correlation values")
+```
+
+###Boxplot of our data
+```{r message=FALSE}
+#predictors.scaled = scale(df[, 1:9])
+#cancer = df$Is_Malignant
+#db.lm = lm(cancer ~ predictors.scaled)
+
+#db.lm.tidy = tidy(db.lm, conf.int = TRUE)
+#db.lm.tidy[2:10, 1] =names(df)[1:9]
+#data.frame(db.lm.tidy[, 1],round(db.lm.tidy[,-1], 2))
+#head(predictors.scaled)
+
+#ggplot(db.lm.tidy[-1, ],aes(x = estimate, y = term, xmin = conf.low,xmax = conf.high, color = term)) +
+#  geom_point() +
+#  geom_errorbarh() +
+#  geom_vline(xintercept = 0)
+
+ggplot(stack(bc[,1:9]), aes(x = ind, y = values)) +
+  geom_boxplot() + 
+  #theme(axis.text.x = element_text(angle = 60, hjust = 1, vjust=1)) +
+  labs(title = "Boxplots of columns") +
+  labs(x = "", y = "Values") + 
+  scale_y_continuous(breaks = seq(1, 10, by = 1)) +
+  coord_flip()
+```
+
+Just to get a range of the variable values, boxplot has been plotted. For example, clump thickness ranges from 2 to 6 and has a median close to 4. In case of uniformity of cell size, uniformity of cell shape value starts from 1 and that itself is median that means at least 50% of the data has value for these variable 1. In case of mitoses, it is clear that data is congested at value 1 and there is not much variation except few outliers. So, how mitoses affect breast cancer is difficult to analyze from this dataset.
+
+###Logistic Regression with Backward elimination technique
+
+We have used Logistic Regression with backward elimination technique to reduce the number of variables. The process we followed was to check what impacts the residual change and eliminated the variables accordingly. We removed one variable at a time. Each time we removed the variable which had highest p value till we found all the variable with p value less than 0.01 as we had set significance level as 0.01. For example, when we did not eliminate any variable the model summary showed coefficient of p value for Uniformity_of_cell_size was highest with a value of 0.773024. So we eliminated Uniformity_of_cell_size. Similarly, one by one we removed 3 more variables. Finally, we were down to 4 predictors from 9. Clump thickness, Uniformity of cell shape, Bland Chromatin and Marginal Adhesion are our final 4 variables for glm model. Let us analyze their individual impact on target variable.
+
+```{r, include=FALSE}
+cancer.logistic =glm(Is_Malignant~., family = binomial, data = bc)
+summary(cancer.logistic)
+```
+
+```{r, include=FALSE}
+cancer.logistic =glm(Is_Malignant ~ Clump_thickness + Uniformity_of_cell_shape + Marginal_adhesion +
+                    Single_Epithelial_Cell_size + Bare_Nuclei + Bland_Chromatin + Normal_Nucleoli +
+                    Mitoses, family = binomial, data = bc)
+summary(cancer.logistic)
+```
+
+```{r, include=FALSE}
+cancer.logistic =glm(Is_Malignant ~ Clump_thickness + Uniformity_of_cell_shape + Marginal_adhesion+
+                    Bare_Nuclei + Bland_Chromatin + Normal_Nucleoli +
+                    Mitoses, family = binomial, data = bc)
+summary(cancer.logistic)
+```
+
+```{r, include=FALSE}
+cancer.logistic =glm(Is_Malignant ~ Clump_thickness + Uniformity_of_cell_shape + Marginal_adhesion +
+                    Bare_Nuclei + Bland_Chromatin + Normal_Nucleoli,
+                  family = binomial, data = bc)
+summary(cancer.logistic)
+```
+
+```{r, include=FALSE}
+cancer.logistic =glm(Is_Malignant ~ Clump_thickness + Uniformity_of_cell_shape + Marginal_adhesion+
+                    Bland_Chromatin + Normal_Nucleoli,
+                  family = binomial, data = bc)
+summary(cancer.logistic)
+```
+
+```{r}
+# cancer.logistic =glm(Is_Malignant ~ Clump_thickness + Uniformity_of_cell_shape + Marginal_adhesion+
+#                     Bland_Chromatin,
+#                   family = binomial, data = bc)
+# summary(cancer.logistic)
+```
+
+```{r, include=FALSE}
+cancer.logistic =glm(Is_Malignant ~ Clump_thickness + Uniformity_of_cell_shape + Bland_Chromatin ,
+                  family = binomial, data = bc)
+
+summary(cancer.logistic)
+```
+
+###Density Plot 
+```{r message=FALSE}
+color.palette = c("Blue", "Red", "#999999", "#E69F00", "#56B4E9", "#0072B2")
+
+gg9 = ggplot(bc, aes(x = Clump_thickness, fill = factor(bc$Is_Malignant))) +
+  geom_density(alpha = 0.25) 
+gg9 = gg9  +
+  scale_fill_manual(values = color.palette) +
+  labs(fill = "Malignant")
+
+gg10 = ggplot(bc, aes(x = Uniformity_of_cell_shape, fill = factor(bc$Is_Malignant))) +
+  geom_density(alpha = 0.25) 
+gg10 = gg10  +
+  scale_fill_manual(values = color.palette) +
+  labs(fill = "Malignant")
+
+gg11 = ggplot(bc, aes(x = Bland_Chromatin, fill = factor(bc$Is_Malignant))) +
+  geom_density(alpha = 0.25)
+gg11 = gg11  +
+  scale_fill_manual(values = color.palette) +
+  labs(fill = "Malignant")
+
+gg12 = ggplot(bc, aes(x = Marginal_adhesion, fill = factor(bc$Is_Malignant))) +
+  geom_density(alpha = 0.25)
+gg12 = gg12  +
+  scale_fill_manual(values = color.palette) +
+  labs(fill = "Malignant")
+```
+
+```{r message=FALSE}
+theme_set(theme_cowplot(font_size=12))
+
+plot_grid(gg9, gg10, gg11, gg12, ncol = 2)
+```
+
+
+**Clump thickness:** Values for benign cells tends to be on lower end and for malignant cells values tends to higher in general
+
+**Bland chromatin, Uniformity of cell shape, Marginal adhesion:** Values are highly dense at the lower end of the range and does not vary much for benign cells where in case of malignant cells, values have higher variance and are roughly spread across the entire range.
+
+###How probability of cancer vary with each variable:
+```{r message=FALSE}
+clump = aggregate(Is_Malignant ~ Clump_thickness, mean, data = bc)
+
+adhesion = aggregate(Is_Malignant ~ Marginal_adhesion, mean, data = bc)
+
+chromatin = aggregate(Is_Malignant ~ Bland_Chromatin, mean, data = bc)
+
+cellshape = aggregate(Is_Malignant ~ Uniformity_of_cell_shape, mean, data = bc)
+
+clump$Type = rep('Clump_thickness', nrow(clump))
+colnames(clump) = c('Severity', 'Is_Malignant', 'Type')
+
+adhesion$Type = rep('Marginal_adhesion', nrow(adhesion))
+colnames(adhesion) = c('Severity', 'Is_Malignant', 'Type')
+
+chromatin$Type = rep('Bland_Chromatin', nrow(chromatin))
+colnames(chromatin) = c('Severity', 'Is_Malignant', 'Type')
+
+cellshape$Type = rep('Uniformity_of_cell_shape', nrow(cellshape))
+colnames(cellshape) = c('Severity', 'Is_Malignant', 'Type')
+
+binded = data.frame(rbind(clump, adhesion, chromatin, cellshape))
+
+ggplot(binded, aes(y = Is_Malignant, x = Severity)) + 
+  geom_point() +
+  geom_line() +
+  ggtitle('Aggregate Malignant cases for each attribute') + 
+  facet_wrap( ~ factor(Type), ncol = 2)
+```
+The graph represents how the probability of cell being malignant varies as the value for each of the variable increases. In all the 4 variables, as the values increases probability of cell being malignant increases. This corroborate the insight provided by density plot above where we saw that benignant cells value tend to be on the lower end. 
+
+###Grid based classification using 2 variables
+```{r message=FALSE}
+ggplot(bc, aes(x= Marginal_adhesion, y = Clump_thickness)) +
+  geom_point(aes(color = factor(Is_Malignant), size = 1.5)) +
+  #geom_vline(xintercept = 7) + 
+  #geom_hline(yintercept = 8) +
+  ggtitle("Clump_Thickness vs Marginal Adhesion") +
+  #geom_smooth(span = 2) +
+  labs(fill = "Malignant") +
+  guides(size = FALSE)
+
+ggplot(bc, aes(x= Uniformity_of_cell_shape, y = Bland_Chromatin)) +
+  geom_point(aes(color = factor(Is_Malignant), size = 1.5)) +
+  #geom_vline(xintercept = 7) + 
+  #geom_hline(yintercept = 8) +
+  ggtitle("Uniformity of Cell Shape vs Bland Chromatin") +
+  #geom_smooth() +
+  labs(fill = "Malignant") +
+  guides(size = FALSE)
+
+#plot_grid(plot1,plot2, ncol = 2)
+```
+
+To see how the class distribution varies with 2 variables we have plotted these graphs. We see that as the value for any variable increases from somewhere around 6.5 to 7.5, it is certain that cells are malignant. For values lower than 3 it is safe as they are benignant cells but for values between 3 and 6.5 it is uncertain.
+
+```{r message=FALSE, include=FALSE}
+bc1 = bc
+cancer.leaps = regsubsets(Is_Malignant ~ ., data = bc1)
+#summary(cancer.leaps)$which
+#summary(cancer.leaps)$cp
+
+tidy(lm(Is_Malignant ~ Clump_thickness + Marginal_adhesion + Uniformity_of_cell_shape + Bland_Chromatin, data = bc1))
+
+clump_cellshape.glm = glm(Is_Malignant ~ Clump_thickness + Uniformity_of_cell_shape, 
+                 family = "binomial", data = bc1)
+
+#summary(partyIm.glm)
+clump_cellshape.int.glm = glm(Is_Malignant ~ Clump_thickness * Uniformity_of_cell_shape, 
+                     family = "binomial", data = bc1)
+
+#summary(partyIm.int.glm)
+grid = expand.grid(Clump_thickness = 1:10, Uniformity_of_cell_shape = 1:10)
+cancer.no = predict(clump_cellshape.glm, newdata = grid, type = "response", se.fit = TRUE)$fit
+cancer.int = predict(clump_cellshape.int.glm, newdata = grid, type = "response", se.fit = TRUE)$fit
+grid2 = data.frame(grid, cancer.no, cancer.int)
+
+grid2 = gather(grid2, key = model, value = cancer, c("cancer.no", "cancer.int"))
+
+grid2$model = recode_factor(grid2$model, "cancer.no" = "No interaction", "cancer.int" = "With interaction")
+
+gg1 = ggplot(grid2, aes(x = Clump_thickness, y = cancer, group = model, color = model)) + 
+  geom_line() +
+  facet_grid(~Uniformity_of_cell_shape) +
+  xlab("Clump Thickness") + 
+  ylab("Chance of cancer") + 
+  ggtitle("Clump Thickness\n and Uniformity of cell shape") +
+  theme(axis.text.x=element_blank(),axis.ticks.x=element_blank())
+```
+
+
+```{r message=FALSE}
+cellshape_adhesion.glm = glm(Is_Malignant ~ Uniformity_of_cell_shape + Marginal_adhesion, 
+                 family = "binomial", data = bc1)
+
+# summary(partyIm.glm)
+cellshape_adhesion.int.glm = glm(Is_Malignant ~ Uniformity_of_cell_shape * Marginal_adhesion, 
+                     family = "binomial", data = bc1)
+
+# summary(partyIm.int.glm)
+grid = expand.grid(Uniformity_of_cell_shape = 1:10, Marginal_adhesion = 1:10)
+cancer.no = predict(cellshape_adhesion.glm, newdata = grid, type = "response", se.fit = TRUE)$fit
+cancer.int = predict(cellshape_adhesion.int.glm, newdata = grid, type = "response", se.fit = TRUE)$fit
+grid2 = data.frame(grid, cancer.no, cancer.int)
+
+grid2 = gather(grid2, key = model, value = cancer, c("cancer.no", "cancer.int"))
+
+grid2$model = recode_factor(grid2$model, "cancer.no" = "No interaction", 
+                            "cancer.int" = "With interaction")
+
+gg2 = ggplot(grid2, aes(x = Uniformity_of_cell_shape, y = cancer, group = model, color = model)) + 
+  geom_line() +
+  facet_grid(~Marginal_adhesion) +
+  xlab("Uniformity of cell shape") + 
+  ylab("Chance of cancer") + 
+  ggtitle("Uniformity of cell shape\n and Marginal Adhesion")+
+  theme(axis.text.x=element_blank(),axis.ticks.x=element_blank())
+```
+
+```{r message=FALSE}
+cellshape_chromatin.glm = glm(Is_Malignant ~ Uniformity_of_cell_shape + Bland_Chromatin, 
+                 family = "binomial", data = bc1)
+
+# summary(partyIm.glm)
+cellshape_chromatin.int.glm = glm(Is_Malignant ~ Uniformity_of_cell_shape * Bland_Chromatin, 
+                     family = "binomial", data = bc1)
+
+# summary(partyIm.int.glm)
+grid = expand.grid(Uniformity_of_cell_shape = 1:10, Bland_Chromatin = 1:10)
+cancer.no = predict(cellshape_chromatin.glm, newdata = grid, type = "response", se.fit = TRUE)$fit
+cancer.int = predict(cellshape_chromatin.int.glm, newdata = grid, type = "response", se.fit = TRUE)$fit
+grid2 = data.frame(grid, cancer.no, cancer.int)
+
+grid2 = gather(grid2, key = model, value = cancer, c("cancer.no", "cancer.int"))
+
+grid2$model = recode_factor(grid2$model, "cancer.no" = "No interaction", 
+                            "cancer.int" = "With interaction")
+
+gg3 = ggplot(grid2, aes(x = Uniformity_of_cell_shape, y = cancer, group = model, color = model)) + 
+  geom_line() + facet_grid(~Bland_Chromatin) + xlab("Uniformity of cell shape") + 
+  ylab("Chance of cancer") + 
+  ggtitle("Uniformity of cell shape\n and Bland Chromatin")+
+  theme(axis.text.x=element_blank(),axis.ticks.x=element_blank())
+
+```
+
+```{r message=FALSE}
+clump_adhesion.glm = glm(Is_Malignant ~ Clump_thickness + Marginal_adhesion, family = "binomial", data = bc1)
+
+# summary(partyIm.glm)
+clump_adhesion.int.glm = glm(Is_Malignant ~ Clump_thickness * Marginal_adhesion, 
+                    family = "binomial", data = bc1)
+# summary(partyIm.int.glm)
+grid = expand.grid(Clump_thickness = 1:10, Marginal_adhesion = 1:10)
+cancer.no = predict(clump_adhesion.glm, newdata = grid, type = "response", se.fit = TRUE)$fit
+cancer.int = predict(clump_adhesion.int.glm, newdata = grid, type = "response", se.fit = TRUE)$fit
+grid2 = data.frame(grid, cancer.no, cancer.int)
+
+grid2 = gather(grid2, key = model, value = cancer, c("cancer.no", "cancer.int"))
+
+grid2$model = recode_factor(grid2$model, "cancer.no" = "No interaction", 
+                            "cancer.int" = "With interaction")
+
+gg4 = ggplot(grid2, aes(x = Clump_thickness, y = cancer, group = model, color = model)) + 
+  geom_line() + facet_grid(~Marginal_adhesion) + xlab("Clump Thickness") + ylab("Chance of cancer") + 
+  ggtitle("Clump Thickness\n and Marginal Adhesion")+
+  theme(axis.text.x=element_blank(),axis.ticks.x=element_blank())
+```
+
+```{r message=FALSE, }
+clump_chromatin.glm = glm(Is_Malignant ~ Clump_thickness + Bland_Chromatin, family = "binomial", data = bc1)
+
+# summary(partyIm.glm)
+clump_chromatin.int.glm = glm(Is_Malignant ~ Clump_thickness * Bland_Chromatin, family = "binomial", data = bc1)
+# summary(partyIm.int.glm)
+grid = expand.grid(Clump_thickness = 1:10, Bland_Chromatin = 1:10)
+cancer.no = predict(clump_chromatin.glm, newdata = grid, type = "response", se.fit = TRUE)$fit
+cancer.int = predict(clump_chromatin.int.glm, newdata = grid, type = "response", se.fit = TRUE)$fit
+grid2 = data.frame(grid, cancer.no, cancer.int)
+
+grid2 = gather(grid2, key = model, value = cancer, c("cancer.no", "cancer.int"))
+
+grid2$model = recode_factor(grid2$model, "cancer.no" = "No interaction", 
+                            "cancer.int" = "With interaction")
+
+gg5 = ggplot(grid2, aes(x = Clump_thickness, y = cancer, group = model, color = model)) + 
+  geom_line() + facet_grid(~Bland_Chromatin) + xlab("Clump Thickness") + ylab("Chance of cancer") + 
+  ggtitle("Clump Thickness\n and Bland_Chromatin")+
+  theme(axis.text.x=element_blank(),axis.ticks.x=element_blank())
+```
+
+```{r message=FALSE}
+chromatin_adhesion.glm = glm(Is_Malignant ~ Marginal_adhesion + Bland_Chromatin, family = "binomial", data = bc1)
+
+# summary(partyIm.glm)
+chromatin_adhesion.int.glm = glm(Is_Malignant ~ Marginal_adhesion * Bland_Chromatin, family = "binomial", data = bc1)
+# summary(partyIm.int.glm)
+grid = expand.grid(Marginal_adhesion = 1:10, Bland_Chromatin = 1:10)
+cancer.no = predict(chromatin_adhesion.glm, newdata = grid, type = "response", se.fit = TRUE)$fit
+cancer.int = predict(chromatin_adhesion.int.glm, newdata = grid, type = "response", se.fit = TRUE)$fit
+grid2 = data.frame(grid, cancer.no, cancer.int)
+
+grid2 = gather(grid2, key = model, value = cancer, c("cancer.no", "cancer.int"))
+
+
+grid2$model = recode_factor(grid2$model, "cancer.no" = "No interaction", 
+                            "cancer.int" = "With interaction")
+
+gg6 = ggplot(grid2, aes(x = Bland_Chromatin, y = cancer, group = model, color = model)) + 
+  geom_line() + facet_grid(~Marginal_adhesion) + xlab("Bland Chromatin") + 
+  ylab("Chance of cancer") + ggtitle("Bland_Chromatin\n and Marginal adhesion")+
+  theme(axis.text.x=element_blank(),axis.ticks.x=element_blank())
+```
+
+```{r message=FALSE}
+#require(cowplot)
+#theme_set(theme_cowplot(font_size=12))
+
+#plot_grid(gg1, gg2, gg3, gg4, gg5, gg6, ncol = 2)
+
+cancer.model = glm(Is_Malignant ~ Clump_thickness + Marginal_adhesion + 
+                     Uniformity_of_cell_shape + Bland_Chromatin + 
+                     Clump_thickness:Marginal_adhesion + Clump_thickness:Uniformity_of_cell_shape + 
+                     Clump_thickness:Bland_Chromatin , family = "binomial", data = bc1)
+```
+
+```{r message=FALSE, include=FALSE}
+cancer.model.df = bc
+cancer.model.df$.fitted = fitted.values(cancer.model)
+cancer.model.df$.resid = residuals(cancer.model, type = "response")
+# ggplot(cancer.model.df, aes(x = .fitted, y = .resid)) +
+#   geom_point() +
+#   geom_smooth(method = "lm", method.args = list(degree = 1)) +
+#   xlab("Fitted values") +
+#   ylab("Residuals")
+
+summary(cancer.model)
+
+cancer.grid = expand.grid(Clump_thickness = 1:6, Marginal_adhesion = 1:6, 
+                          Uniformity_of_cell_shape = 1:6, Bland_Chromatin = 1:6)
+
+cellshape_names = c("1" = "UCS: 1", "2" = "UCS: 2", "3" = "UCS: 3", "4" = "UCS: 4", 
+              "5" = "UCS: 5", "6" = "UCS: 6" )
+adhesion_names = c("1" = "MA: 1", "2" = "MA: 2", "3" = "MA: 3", "4" = "MA: 4", "5" = "MA: 5", "6" = "MA: 6" )
+clump_names = c("1" = "CT: 1", "2" = "CT: 2", "3" = "CT: 3", "4" = "CT: 4", "5" = "CT: 5", "6" = "CT: 6" )
+chromatin_names = c("1" = "BC: 1", "2" = "BC: 2", "3" = "BC: 3", "4" = "BC: 4", "5" = "BC: 5", "6" = "BC: 6" )
+
+cancer.prediction = predict(cancer.model, newdata = cancer.grid, type = "response")
+cancer.grid1 = data.frame(cancer.grid, cancer.prob = as.vector(cancer.prediction))
+
+ggplot(cancer.grid1, aes(x = Clump_thickness, y = cancer.prob*100, 
+                         group = Bland_Chromatin, color = Bland_Chromatin)) +
+  geom_line() + facet_grid(Marginal_adhesion ~ Uniformity_of_cell_shape, 
+                           labeller = labeller(Uniformity_of_cell_shape = as_labeller(cellshape_names), 
+                                               Marginal_adhesion = as_labeller(adhesion_names)))+ 
+  xlab("Clump Thickness") + ylab("Probability of Cancer") + labs(color = "Bland Chromatin")
+
+ggplot(cancer.grid1, aes(x = Clump_thickness, y = cancer.prob*100, 
+                         group = Marginal_adhesion, color = Marginal_adhesion)) + 
+  geom_line() + facet_grid(Uniformity_of_cell_shape ~ Bland_Chromatin, 
+                           labeller = labeller(Uniformity_of_cell_shape = as_labeller(cellshape_names), 
+                                               Bland_Chromatin = as_labeller(chromatin_names)))+ 
+  xlab("Clump Thickness") + ylab("Probability of Cancer") + labs(color = "Marginal Adhesion")
+```
+
+### Fitting the glm model: 
+
+To increase the complexity of the model and eventually accuracy of the prediction, we have decided to include the combinations of two variable as well. We have 4 variables so to choose 2 from 4 we had total 6 options and out of these 6 we have picked 3 combination based on their interaction plots and later through hit and trial, it was verified to perform the best. 
+```{r message=FALSE}
+cancer.model = glm(Is_Malignant ~ Clump_thickness + Marginal_adhesion + 
+                     Uniformity_of_cell_shape + Bland_Chromatin + 
+                     Clump_thickness:Marginal_adhesion + 
+                     Clump_thickness:Uniformity_of_cell_shape + 
+                     Clump_thickness:Bland_Chromatin , family = "binomial", data = bc)
+
+cancer.model.df = bc
+cancer.model.df$.fitted = fitted.values(cancer.model)
+cancer.model.df$.resid = residuals(cancer.model, type = "response")
+# ggplot(cancer.model.df, aes(x = .fitted, y = .resid)) + geom_point() + 
+#   geom_smooth(method = "lm", method.args = list(degree = 1)) + 
+#   xlab("Fitted values") + ylab("Residuals")
+
+summary(cancer.model)
+```
+
+###Accuracy on test set:
+```{r message=FALSE}
+train <- bc1[1:550,]
+test <- bc1[551:683,]
+
+fitted.results <- predict(cancer.model,newdata=subset(test,select=c(1,3,4,7)),type='response')
+fitted.results <- ifelse(fitted.results > 0.5,1,0)
+misClasificError <- mean(fitted.results != test$Is_Malignant)
+#print(paste('Accuracy',1-misClasificError))
+paste('Accuracy =', (1-misClasificError)*100,'%')
+```
+
+# Dimensionality Reduction: PCA
+- If we have a large amount of data, we would like to avoid the curse of dimensionality and  would like to reduce the time and space required.
+- We tried to transform the dimensions of the data which captures the maximum variance using PCA and observed how much variance we can capture using PCA.
+- This would let us easily visualize the data. 
+- It would also help us remove the multi-collinearity, which would help us ignore redundant features.
+```{r message=FALSE}
+pca_res <- prcomp(bc[,1:9], center = TRUE, scale = TRUE)
+plot(pca_res, type="l", main='Variance Captured using different variables after PCA')
+```
+
+- We can see that, after applying PCA, the maximum variance is captured by the first variable. The second and the third variable also contributes to the variance a little.
+So now we can check how the data looks using the most important 2 and 3 dimensions.
+
+
+```{r message=FALSE, warning=FALSE}
+### PCA using 2 PCA dimensions
+pca_df <- as.data.frame(pca_res$x)
+
+ggplot(pca_df, aes(x=PC1, y=PC2, col=bc$Is_Malignant)) +
+  geom_point(alpha=0.5) +
+  #xlab(names(df)) +
+  labs(fill = "Malignant")+
+  ggtitle("Data using 2 dimensions after PCA")+
+  labs(color='Class: Malignant')
+```
+
+- We can see that the data seems quite seperable using just the 2 dimensions. 
+We will just check how it looks using 3 dimensions.
+
+
+```{r message=FALSE, warning=FALSE}
+### PCA using 3 PCA dimensions
+library(plotly)
+legendtitle <- list(y=1.05,x=1.18,text="Class: Malignant",showarrow=F)
+plot_ly(x=pca_df$PC1, y=pca_df$PC2, z=pca_df$PC3, type="scatter3d", mode="markers",marker = list(size = 5), color=bc$Is_Malignant) %>%
+  layout(
+    title = "Data using 3 dimensions after PCA",
+    scene = list(
+      xaxis = list(title = "PC1"),
+      yaxis = list(title = "PC2"),
+      zaxis = list(title = "PC3")
+    ),
+    annotations=legendtitle
+  )
+```
+
+- Again, we see that the data looks pretty seperable using 3 dimensions as well.
+- We can observe that using just the 2 dimensions, we get very seperated results. Hence, we proceed with applying a linear model to classify the malign and benign tumors on the 2 PCA reduced dimensions.
+
+#### Decision boundary
+Let us draw a decision boundary on the data from the 2 dimensional PCA.
+
+```{r , warning=FALSE}
+mdl <- glm( bc$Is_Malignant ~ . , data = pca_df , family=binomial)
+
+slope <- coef(mdl)[2]/(-coef(mdl)[3])
+intercept <- coef(mdl)[1]/(-coef(mdl)[3]) 
+
+library(lattice)
+xyplot( PC2 ~ PC1 , data = pca_df, groups = bc$Is_Malignant,
+   panel=function(...){
+       panel.xyplot(...)
+       panel.abline(intercept , slope)
+       panel.grid(...)
+       }, main="Data using 2 dimensions after PCA with the decison boundary")
+```
+
+- The decision boundary which is drawn separated the data pretty well enough.
+Now, we calculate the accuracy of the data separated by the decision boundary.
+
+```{r}
+predictions <- predict(mdl,newdata=pca_df,type='response')
+predictions <- ifelse(predictions > 0.5,1,0)
+misClasificError <- mean(predictions != bc$Is_Malignant)
+print(paste('Accuracy',1-misClasificError))
+```
+
+####Results
+- We observe that the accuracy of around 97.07% is a good prediction using data with such low dimensions.
+- But, here the problem is we cannot interpret the dimensions which we get from PCA. Hence, we need something that can give us some high accuracy with interpretable features.
+- Therefore, we next tried random forest, whose result features would be interpretable and more practical.
+
+
+# Random Forest
+
+- As discussed above PCA gives us good results but is less interpretable. Hence, we will use a random forest model which is developed by aggregating trees.
+- The advantage of random forest is that its results are very interpretable and it also avoids overfitting.
+- We can perform feature selection based on their importance.
+- As an extension, there are many other health test which can be done which can be useful for breast cancer diagnosis, due to which we can have more number of features that can be handled using random forest.
+
+**We experiment the model with different depths and check which one performs the best.**
+
+
+```{r message=FALSE, include=FALSE}
+#install.packages("randomForest")
+model1 <- randomForest(x=bc[,1:9],y=as.factor(bc$Is_Malignant), importance = TRUE,depth=1)
+model1
+```
+
+
+```{r message=FALSE, include=FALSE}
+model2 <- randomForest(x=bc[,1:9],y=as.factor(bc$Is_Malignant), importance = TRUE,depth=2)
+model2
+```
+
+
+```{r message=FALSE, include=FALSE}
+model3 <- randomForest(x=bc[,1:9],y=as.factor(bc$Is_Malignant), importance = TRUE,depth=3)
+model3
+```
+
+
+```{r message=FALSE, include=FALSE}
+model4 <- randomForest(x=bc[,1:9],y=as.factor(bc$Is_Malignant), importance = TRUE,depth=4)
+model4
+```
+
+
+```{r message=FALSE, include=FALSE}
+model5 <- randomForest(x=bc[,1:9],y=as.factor(bc$Is_Malignant), importance = TRUE,depth=5)
+model5
+```
+
+
+```{r message=FALSE, include=FALSE}
+model6 <- randomForest(x=bc[,1:9],y=as.factor(bc$Is_Malignant), importance = TRUE,depth=6)
+model6
+```
+Accuracy for models with depths: 1,2,3,4,5,6 = 
+```{r}
+error<-c(2.93,3.22,2.64,3.07,3.07,2.64)
+acclist<-100-error
+acclist
+```
+
+- Now lets visualise the accuracy values.
+```{r}
+accuracydf = data.frame(Depth = c(1,2,3,4,5,6), acclist = acclist)  
+ggplot(accuracydf, aes(x = Depth, y = acclist, width = 0.75)) +
+  geom_line(stat = "identity",size=1.4) +
+  xlab("Depth of Random Forest") +
+  ylab("Accuracy of Model") +
+  geom_point(color='blue', size = 6) +
+  ggtitle("Change in accuracy with change in depth")
+```
+For depth = 1, it gives the accuracy of 97.07 and after increasing the depth it does not help much with the accuracy. At max we reached to 97.37% of accuracy at depth =3 and depth =6 and this change is not sufficient enough to go for higher depth and unnecessarily overfit our model.
+
+
+
+
+```{r}
+varImportance <- varImp(model1, scale = FALSE)
+#varImportance
+varImportanceScores <- data.frame(varImportance$`0`)
+#varImportanceScores
+varImportanceScores <- data.frame(Features = row.names(varImportance), Importance = varImportanceScores$varImportance..0.)
+#varImportanceScores
+
+```
+
+# Gini importance of features in Random Forest:
+
+Gini Importance or Mean Decrease in Impurity (MDI) calculates each feature importance as the sum over the number of splits (across all trees) that include the feature, proportionally to the number of samples it splits. We have plotted relative feature importance of the model that we have created.
+
+```{r}
+library(randomForest)
+set.seed(7)
+varImpPlot(model1, type = 2, main = "Feature importance of attributes")
+```
+
+- We can observe that the uniformity of cell size and cell shape has the higher importance compared to remaining features. Further, lets create a tree from which we can interpret our results very easily by just looking at the symptoms of a patient.
+
+```{r fig.width=10, fig.height=7}
+library(rpart)
+fit=rpart(factor(Is_Malignant)~., bc)
+plot(fit, main = "Dendogram showing the random forest model")
+text(fit,pretty = TRUE, fancy = FALSE, fwidth = 0.8, fheight = 0.8)
+```
+
+- As we can see, now the results are very interpretable as we can just measure each of the attributes and we can decide with good confidence, whether a person has a malignant tumor or a benign one. 
+- For example, if a patient has the uniformity of cell size less than 2.5, uniformity of cell shape greater than 2.5 and Bland chromatin greater than 3.5, then the person is most likely to have a malignant tumor.
+
+
+###Accuracy: 
+We tried 3 different models: GLM, GLM with PCA and Random Forest. Accuracy of those models are 99.4% ,  97% and 97.07% respectively. Random Forest was chosen to be the final model because it gave us pretty high accuracy just using DEPTH=1 and estimators=100.
+
+ 
+
+###Conclusion: 
+We have done detailed analysis on which features are useful in predicting malignancy of breast cancer. We also gave a simple dendogram chart prepared from Random Forest that can help anyone to predict whether a tumor is benign or malignant from 9 given features. From our derived conclusions we can conclude that there are mainly 1 or 2 features of tumor cell which are most important in order to predict malignancy of tumor. Also, it is much important to identify cancerous nature of tumor cells in early stages as nearly 86% of patients could be cured if tumor is treated early. As a future work, we can test on more practical data to get conclusions on robustness of our model and improve our findings.
+
+ 
+
+
+### Acknowledgement:
+We thank Prof. Brad Luen and Seiji Sloan for guiding us throughout the project. The inspiration to try Random Forest Model and make simple dendogram like chart came from suggestions by Prof. Brad Luen during the presentations and we really thank him to guide us throughout the semester.
+
+### References
+
+- https://www.researchgate.net/profile/Akash_Nag2/publication/325868350_Identifying_Patients_at_Risk_of_Breast_Cancer_through_Decision_Trees/links/5b2a29da4585150c63400a5f/Identifying-Patients-at-Risk-of-Breast-Cancer-through-Decision-Trees.pdf?origin=publication_detail
+
+- https://www.breastcancer.org/symptoms/understand_bc/statistics
+
+- http://pathology.jhu.edu/pc/BasicTypes1.php
+
